@@ -1,98 +1,67 @@
-# PDF to Podcast Generator with Groq AI
+# EduAI - Interactive Learning Platform
 
-This project converts PDF documents into engaging podcasts using Groq's AI models for content generation and gTTS for text-to-speech conversion.
+**EduAI** is a smart, AI-powered platform designed to make learning more interactive and accessible. It allows users to upload their study notes in PDF format, ask AI questions related to the content, generate concise summaries, and even convert notes into podcasts for auditory learning.
 
-## Features
+---
 
-- PDF text extraction
-- AI-powered content summarization
-- Conversational podcast script generation
-- Text-to-speech with different voices for host and guest
-- Background task processing
-- Progress tracking
-- Optional background music support
+## ✅ Features
 
-## Setup
+- Upload and manage PDF notes
+- AI-powered Q&A from uploaded notes
+- AI-generated note summarization
+- Convert notes into podcasts (text-to-speech)
+- Modern, responsive user interface with dark/light mode
+- Secure authentication and cloud storage using Supabase
 
-1. **Clone the repository and create virtual environment**:
-   ```bash
-   python -m venv venv
-   .\venv\Scripts\activate  # On Windows
-   source venv/bin/activate  # On Unix/macOS
-   ```
+---
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 👨‍💻 Developed By
 
-3. **Set up environment variables**:
-   - Copy `.env.example` to `.env`
-   - Add your Groq API key (get it from https://console.groq.com/keys)
-   ```bash
-   cp .env.example .env
-   ```
+- **Mohit R** – R22EK044  
+- **SP Monish** – R22EK049  
+- **Sai Sunil G** – R22EA052  
+- **Sai Akhil V** – R22EA051
 
-4. **Run the application**:
-   ```bash
-   uvicorn app:app --reload
-   ```
+---
 
-## API Endpoints
+## 📦 How to Clone and Run the Project Locally
 
-- `GET /health`: Health check endpoint
-- `POST /create-podcast`: Create a new podcast from PDF
-  - Required: PDF file
-  - Optional: AI model name (default: mixtral-8x7b-32768)
-- `GET /podcast-status/{task_id}`: Check podcast creation status
-- `GET /podcast/{task_id}`: Download generated podcast
+### 1. Clone the Repository
 
-## Usage Example
-
-1. **Check server health**:
-   ```bash
-   curl http://localhost:8000/health
-   ```
-
-2. **Create a podcast**:
-   ```bash
-   curl -X POST http://localhost:8000/create-podcast \
-     -F "pdf_file=@your_document.pdf" \
-     -F "model=mixtral-8x7b-32768"
-   ```
-
-3. **Check status**:
-   ```bash
-   curl http://localhost:8000/podcast-status/{task_id}
-   ```
-
-4. **Download podcast**:
-   ```bash
-   curl http://localhost:8000/podcast/{task_id} --output podcast.mp3
-   ```
-
-## Project Structure
-
-```
-podcast_groq/
-├── app.py              # FastAPI application
-├── utils.py            # Utility functions
-├── podcast_generator.py # Podcast generation logic
-├── requirements.txt    # Python dependencies
-├── .env.example       # Environment variables template
-└── README.md          # This file
+```bash
+git clone https://github.com/SpMonish84/EduAI.git
+cd EduAI
 ```
 
-## Dependencies
+### 2. Backend Setup (Python)
+```bash
+python -m venv venv
+# Windows
+.\venv\Scripts\activate
+# macOS/Linux
+source venv/bin/activate
 
-- FastAPI
-- Groq AI
-- PyPDF2
-- gTTS (Google Text-to-Speech)
-- pydub
-- python-multipart
-- python-dotenv
+pip install -r requirements.txt
+```
+```bash 
+python app.py 
+```
+###3. Frontend Setup (Node.js + Next.js)
+```bash
+cd ui
+npm install
+npm run dev
+```
+ - The frontend will start on: http://localhost:3000
 
-## Note
+### 4. Environment Variables
+ - Copy .env.example to .env in both backend and ui/ folder.
 
-Make sure you have enough Groq API credits for text generation. The application uses Groq's Mixtral model by default, which provides high-quality results for content generation.
+ - Add the following keys:
+
+```bash
+GROQ_API_KEY=your_groq_api_key
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+

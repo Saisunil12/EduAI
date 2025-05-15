@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF to Podcast Generator</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-2xl mx-auto">
+            <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">PDF to Podcast Generator</h1>
+            
+            <!-- Upload Section -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-semibold text-gray-700">Upload Your PDF</h2>
+                    <p class="text-gray-600 mt-2">Convert your PDF document into an engaging podcast</p>
+                </div>
+                
+                <form id="uploadForm" class="space-y-4">
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <input type="file" id="pdfFile" accept=".pdf" class="hidden">
+                        <label for="pdfFile" class="cursor-pointer">
+                            <div class="space-y-2">
+                                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <div class="text-gray-600">
+                                    <span class="text-blue-500 hover:text-blue-600">Click to upload</span> or drag and drop
+                                </div>
+                                <p class="text-sm text-gray-500">PDF files only</p>
+                            </div>
+                        </label>
+                        <span id="fileNameDisplay" class="block mt-2 text-sm text-gray-700"></span>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition duration-200">
+                        Generate Podcast
+                    </button>
+                </form>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progressSection" class="hidden bg-white rounded-lg shadow-lg p-6 mb-8">
+                <div class="text-center mb-4">
+                    <h2 class="text-2xl font-semibold text-gray-700">Generating Podcast</h2>
+                    <p id="progressMessage" class="text-gray-600 mt-2">Processing your PDF...</p>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-4">
+                    <div id="progressBar" class="bg-blue-500 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Result Section -->
+            <div id="resultSection" class="hidden bg-white rounded-lg shadow-lg p-6">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-semibold text-gray-700">Your Podcast is Ready!</h2>
+                </div>
+                <div class="space-y-4">
+                    <audio id="podcastPlayer" controls class="w-full"></audio>
+                    <div class="flex space-x-4">
+                        <button id="downloadBtn" class="flex-1 bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600 transition duration-200">
+                            Download Podcast
+                        </button>
+                        <button id="newPodcastBtn" class="flex-1 bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-200">
+                            Create New Podcast
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+/* Custom styles */
+.border-dashed {
+    border-style: dashed;
+}
+
+/* Drag and drop styles */
+.drag-over {
+    border-color: #3B82F6 !important;
+    background-color: #EBF5FF;
+}
+
+/* Progress bar animation */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* File upload hover effect */
+input[type="file"] + label:hover {
+    background-color: #F3F4F6;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #F3F4F6;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #9CA3AF;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #6B7280;
+}
+
+/* Audio player customization */
+audio {
+    border-radius: 8px;
+    background-color: #F3F4F6;
+}
+
+audio::-webkit-media-controls-panel {
+    background-color: #F3F4F6;
+}
+
+/* Button hover effects */
+button {
+    transition: transform 0.2s;
+}
+
+button:hover {
+    transform: translateY(-1px);
+}
+
+button:active {
+    transform: translateY(0);
+} 

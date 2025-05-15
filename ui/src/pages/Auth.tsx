@@ -25,7 +25,7 @@ export default function Auth() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast({
         title: "Missing information",
@@ -36,7 +36,7 @@ export default function Auth() {
     }
 
     const { error } = await signIn(email, password);
-    
+
     if (error) {
       if (error.message.includes("Email not confirmed")) {
         setShowResendOption(true);
@@ -52,7 +52,7 @@ export default function Auth() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast({
         title: "Missing information",
@@ -72,7 +72,7 @@ export default function Auth() {
     }
 
     const { error } = await signUp(email, password);
-    
+
     if (error) {
       toast({
         title: "Sign up failed",
@@ -92,14 +92,14 @@ export default function Auth() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-r from-purple-900/30 via-blue-900/30 to-purple-900/30 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">NoteToAudio</h1>
+          <h1 className="text-4xl font-bold mb-2">EduNote AI</h1>
           <p className="text-muted-foreground">Your notes, your voice</p>
         </div>
-        
+
         <Card>
           <CardHeader>
-            <Tabs 
-              defaultValue={activeTab} 
+            <Tabs
+              defaultValue={activeTab}
               onValueChange={setActiveTab}
               className="w-full"
             >
@@ -112,22 +112,22 @@ export default function Auth() {
                 <CardTitle>Welcome back</CardTitle>
                 <CardDescription>Sign in to your account to continue</CardDescription>
               </TabsContent>
-              
+
               <TabsContent value="signup" className="mt-4">
                 <CardTitle>Create an account</CardTitle>
                 <CardDescription>Enter your details to get started</CardDescription>
               </TabsContent>
             </Tabs>
           </CardHeader>
-          
+
           <CardContent>
             {showResendOption && (
               <Alert className="mb-4 bg-yellow-50 border-yellow-200">
                 <AlertCircle className="h-4 w-4 text-yellow-600" />
                 <AlertDescription className="text-yellow-800">
-                  Please confirm your email to continue. 
-                  <Button 
-                    variant="link" 
+                  Please confirm your email to continue.
+                  <Button
+                    variant="link"
                     className="p-0 h-auto text-yellow-700 font-semibold ml-1"
                     onClick={handleResendEmail}
                   >
@@ -149,7 +149,7 @@ export default function Auth() {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <Input
@@ -161,7 +161,7 @@ export default function Auth() {
                   required
                 />
               </div>
-              
+
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
                   <span>Loading...</span>
@@ -173,7 +173,7 @@ export default function Auth() {
               </Button>
             </form>
           </CardContent>
-          
+
           <CardFooter className="flex flex-col space-y-4">
             <div className="text-sm text-muted-foreground text-center w-full">
               {activeTab === "login" ? (

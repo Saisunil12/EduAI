@@ -116,19 +116,43 @@ export default function Podcast() {
           .from('podcasts')
           .select('*')
           .eq('note_id', selectedNote)
-          .maybeSingle();
+          .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+          // Improved error logging
+          console.error('Error checking for existing podcast:', error);
+          toast({
+            title: 'Error',
+            description: error.message || JSON.stringify(error),
+            variant: 'destructive'
+          });
+          return;
+        }
 
-        if (data) {
-          setPodcast(data);
+        if (data && data.length > 0) {
+          setPodcast(data[0]);
           setPodcastGenerated(true);
         } else {
           setPodcast(null);
           setPodcastGenerated(false);
         }
       } catch (error) {
-        console.error('Error checking for existing podcast:', error);
+        // Improved error logging for thrown exceptions
+        if (error instanceof Error) {
+          console.error('Error checking for existing podcast:', error.message);
+          toast({
+            title: 'Error',
+            description: error.message,
+            variant: 'destructive'
+          });
+        } else {
+          console.error('Error checking for existing podcast:', error);
+          toast({
+            title: 'Error',
+            description: JSON.stringify(error),
+            variant: 'destructive'
+          });
+        }
       }
     };
 
@@ -141,9 +165,7 @@ export default function Podcast() {
       if (podcast && podcast.file_path) {
         let bucket = '';
         let filePath = '';
-        // If file_path is a full URL, extract bucket and path
         if (podcast.file_path.startsWith('http')) {
-          // Example: https://.../object/public/bucket/path/to/file.mp3
           const match = podcast.file_path.match(/object\/public\/([^/]+)\/(.+)$/);
           if (match) {
             bucket = match[1];
@@ -154,16 +176,18 @@ export default function Podcast() {
           }
         } else {
           // If file_path is just the storage path, set your bucket name here
-          bucket = 'podcast_files'; // <-- Change this to your actual bucket name
+          bucket = 'podcast_audio'; // <-- Change this to your actual bucket name
           filePath = podcast.file_path;
         }
         const { data, error } = await supabase.storage
           .from(bucket)
-          .createSignedUrl(filePath, 60 * 60); // 1 hour expiry
+          .createSignedUrl(filePath, 60 * 60);
         if (data?.signedUrl) {
           setAudioUrl(data.signedUrl);
+          console.log('Signed audio URL:', data.signedUrl);
         } else {
           setAudioUrl(null);
+          console.error('Error creating signed URL:', error);
         }
       } else {
         setAudioUrl(null);
@@ -335,7 +359,9 @@ export default function Podcast() {
                 className="gap-2"
               >
                 <Headphones size={18} />
-                {isGenerating ? 'Generating...' : 'Generate Podcast'}
+                {podcastGenerated && podcast
+                  ? (isGenerating ? 'Regenerating...' : 'Regenerate Podcast')
+                  : (isGenerating ? 'Generating...' : 'Generate Podcast')}
               </Button>
             </CardFooter>
           </Card>

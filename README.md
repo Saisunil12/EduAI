@@ -33,7 +33,10 @@ git clone https://github.com/SpMonish84/EduAI.git
 cd EduAI
 ```
 
-### 2. Backend Setup (Python)
+### 2. FFmpeg Setup
+Download FFmpeg from [FFmpeg official builds](https://github.com/BtbN/FFmpeg-Builds/releases) and store it in the project folder.
+
+### 3. Backend Setup (Python)
 ```bash
 python -m venv venv
 # Windows
@@ -46,7 +49,7 @@ pip install -r requirements.txt
 ```bash 
 python app.py 
 ```
-###3. Frontend Setup (Node.js + Next.js)
+###4. Frontend Setup (Node.js + Next.js)
 ```bash
 cd ui
 npm install
@@ -54,7 +57,7 @@ npm run dev
 ```
  - The frontend will start on: http://localhost:3000
 
-### 4. Environment Variables
+### 5. Environment Variables
  - Copy .env.example to .env in both backend and ui/ folder.
 
  - Add the following keys:

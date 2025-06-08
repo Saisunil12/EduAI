@@ -16,7 +16,10 @@ type AuthContextType = {
     error: Error | null;
   }>;
   signOut: () => Promise<void>;
-  resendConfirmationEmail: (email: string) => Promise<void>;
+  resendConfirmationEmail: (email: string) => Promise<{
+    error: Error | null;
+    data: { user: User | null; session: Session | null } | null;
+  }>;
 };
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,35 +28,71 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showResendVerification, setShowResendVerification] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Set up the auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+    let mounted = true;
+    let authListener: { subscription: { unsubscribe: () => void } } | null = null;
 
-        // Defer data fetching to prevent deadlocks
-        if (session?.user) {
-          setTimeout(() => {
-            // You could fetch additional user data here if needed
-          }, 0);
+    const initializeAuth = async () => {
+      try {
+        // First, check for existing session
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          setIsLoading(false);
+          return;
+        }
+        
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        
+        // Set up auth state listener with error handling
+        try {
+          const { data } = supabase.auth.onAuthStateChange(
+            async (event, session) => {
+              if (!mounted) return;
+              
+              setSession(session);
+              setUser(session?.user ?? null);
+              
+              if (event === 'SIGNED_IN') {
+                navigate('/dashboard');
+              } else if (event === 'SIGNED_OUT') {
+                cleanupAuthState();
+                navigate('/auth');
+              }
+            }
+          );
+          
+          authListener = data;
+        } catch (listenerError) {
+          console.error('Error setting up auth listener:', listenerError);
+        }
+        
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (mounted) {
+          setIsLoading(false);
         }
       }
-    );
+    };
 
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
+    initializeAuth();
 
     return () => {
-      subscription.unsubscribe();
+      mounted = false;
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe();
+      }
     };
-  }, []);
+  }, [navigate]);
 
   const cleanupAuthState = () => {
     // Remove standard auth tokens
@@ -73,40 +112,64 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signIn = async (email: string, password: string) => {
+    if (!email || !password) {
+      return { 
+        error: new Error('Please enter both email and password') 
+      };
+    }
+
+    // Clean up any existing auth state first
+    cleanupAuthState();
+    
+    setIsLoading(true);
+    
     try {
-      // Clean up existing state
-      cleanupAuthState();
-      
-      // Attempt global sign out
-      try {
-        await supabase.auth.signOut({ scope: "global" });
-      } catch (err) {
-        // Continue even if this fails
-      }
-      
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // Sign in with email and password
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
       });
       
-      if (!error) {
-        navigate("/dashboard");
-        toast({
-          title: "Welcome back!",
-          description: "You have successfully signed in.",
-        });
-      } else if (error.message.includes("Email not confirmed")) {
-        // Handle email not confirmed error
-        toast({
-          title: "Email not confirmed",
-          description: "Please check your inbox and confirm your email, or request a new confirmation email.",
-          variant: "destructive",
-        });
+      if (error) {
+        console.error('Login error:', error);
+        
+        let errorMessage = 'Invalid email or password';
+        
+        if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Please verify your email before signing in. Check your inbox for a verification link.';
+          setShowResendVerification(true);
+        } else if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'The email or password you entered is incorrect.';
+        } else if (error.message.includes('Email rate limit exceeded') || 
+                  error.message.includes('Too many requests')) {
+          errorMessage = 'Too many login attempts. Please wait a few minutes and try again.';
+        } else if (error.message.includes('Network error')) {
+          errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+        }
+        
+        console.log('Login failed:', errorMessage);
+        
+        return { 
+          error: new Error(errorMessage) 
+        };
       }
       
-      return { error };
+      // If we get here, login was successful
+      // The auth state listener will handle the navigation
+      console.log('Login successful, user:', data.user?.email);
+      return { error: null };
+      
     } catch (error) {
-      return { error: error instanceof Error ? error : new Error("Unknown error") };
+      console.error('Unexpected error during login:', error);
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'An unexpected error occurred during login';
+      
+      return { 
+        error: new Error(errorMessage)
+      };
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -135,29 +198,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const resendConfirmationEmail = async (email: string) => {
     try {
-      const { error } = await supabase.auth.resend({
+      const { data, error } = await supabase.auth.resend({
         type: 'signup',
-        email,
+        email: email.trim(),
       });
-      
+
       if (error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Email sent",
-          description: "A new confirmation email has been sent to your inbox.",
-        });
+        console.error('Error resending confirmation email:', error);
+        return { error, data: null };
       }
-    } catch (error) {
+
       toast({
-        title: "Error",
-        description: "Failed to resend confirmation email.",
-        variant: "destructive",
+        title: 'Verification email sent',
+        description: 'Please check your inbox for the verification link.',
       });
+
+      return { error: null, data };
+    } catch (error) {
+      console.error('Failed to resend confirmation email:', error);
+      return {
+        error: error instanceof Error ? error : new Error('Failed to resend confirmation email'),
+        data: null
+      };
     }
   };
 

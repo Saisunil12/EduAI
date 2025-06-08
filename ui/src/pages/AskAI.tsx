@@ -23,7 +23,7 @@ export default function AskAI() {
   const location = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string>('');
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -53,9 +53,9 @@ export default function AskAI() {
     if (noteIdFromLocation) {
       setSelectedNoteId(noteIdFromLocation);
     } else if (notes.length > 0 && !selectedNoteId) {
-      setSelectedNoteId(notes[0].id);
+      setSelectedNoteId(notes[0].id || '');
     }
-  }, [noteIdFromLocation, notes]);
+  }, [noteIdFromLocation, notes, selectedNoteId]);
 
   // Update messages when selected note changes
   useEffect(() => {
@@ -73,7 +73,23 @@ export default function AskAI() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !selectedNoteId) return;
+    if (!input.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a question",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!selectedNoteId) {
+      toast({
+        title: "Error",
+        description: "Please select a note first",
+        variant: "destructive"
+      });
+      return;
+    }
 
     // Add user message
     const userMessage = {
@@ -83,35 +99,92 @@ export default function AskAI() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages([...messages, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setIsLoading(true);
 
     try {
+      console.log('Preparing chat request...');
+      console.log('Note ID:', selectedNoteId);
+      console.log('Question:', input);
+      
+      const payload = {
+        note_id: selectedNoteId,
+        question: input,
+        history: updatedMessages
+          .filter(m => m.type === 'user' || m.type === 'ai')
+          .map(m => ({
+            role: m.type === 'user' ? 'user' : 'assistant',
+            content: m.message
+          }))
+      };
+      
+      console.log('Request payload:', JSON.stringify(payload, null, 2));
+      
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          note_id: selectedNoteId,
-          question: input,
-          history: messages.map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.message }))
-        })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
-      if (!response.ok) throw new Error('Failed to get AI response');
-      const data = await response.json();
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      const responseData = await response.json().catch(err => {
+        console.error('Error parsing response:', err);
+        return {};
+      });
+      
+      console.log('Response data:', responseData);
+      
+      if (!response.ok) {
+        console.error('API Error:', response.status, response.statusText, responseData);
+        throw new Error(
+          responseData.detail || 
+          responseData.message || 
+          `Error: ${response.status} ${response.statusText}`
+        );
+      }
+      
+      if (!responseData.answer) {
+        throw new Error('Invalid response from server');
+      }
+      
       const aiMessage = {
         id: Date.now() + 1,
         type: 'ai' as const,
-        message: data.answer,
+        message: responseData.answer,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sources: data.sources || []
+        sources: Array.isArray(responseData.sources) ? responseData.sources : []
       };
+      
       setMessages(prevMessages => [...prevMessages, aiMessage]);
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Error in handleSend:', err);
+      
+      const errorMessage = err?.message || 'Failed to get AI response. Please try again.';
+      
+      // Add error message to chat
+      const errorMessageObj = {
+        id: Date.now() + 1,
+        type: 'ai' as const,
+        message: `Sorry, I encountered an error: ${errorMessage}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isError: true
+      };
+      
+      setMessages(prevMessages => [...prevMessages, errorMessageObj]);
+      
+      // Show toast notification
       toast({
         title: 'Error',
-        description: 'Failed to get AI response.',
-        variant: 'destructive'
+        description: errorMessage,
+        variant: 'destructive',
+        duration: 5000
       });
     } finally {
       setIsLoading(false);
@@ -177,7 +250,7 @@ export default function AskAI() {
           </div>
 
           <div className="mt-4 max-w-sm">
-            <Select value={selectedNoteId || undefined} onValueChange={handleSelectNote}>
+            <Select value={selectedNoteId} onValueChange={handleSelectNote}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a note to chat about" />
               </SelectTrigger>

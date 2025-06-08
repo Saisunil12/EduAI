@@ -29,13 +29,23 @@ export default function Dashboard() {
   const { user } = useAuth();
 
   useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     const fetchNotes = async () => {
-      if (!user) return;
-      
       try {
+        setLoading(true);
+        
+        // Try to fetch notes directly - if the table doesn't exist, it will throw an error
+        // that we'll catch in the catch block
+
+        // If table exists, fetch notes
         const { data, error } = await supabase
           .from('notes')
           .select('*')
+          .eq('user_id', user.id)
           .order('created_at', { ascending: false });
           
         if (error) {
@@ -47,9 +57,10 @@ export default function Dashboard() {
         console.error('Error fetching notes:', error);
         toast({
           title: 'Error',
-          description: 'Failed to load your notes',
+          description: 'Failed to load your notes. If this is your first time, try uploading a file first.',
           variant: 'destructive'
         });
+        setNotes([]);
       } finally {
         setLoading(false);
       }
@@ -57,20 +68,33 @@ export default function Dashboard() {
     
     fetchNotes();
     
-    // Subscribe to real-time changes
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'notes' }, 
-        () => {
-          fetchNotes();
-        }
-      )
-      .subscribe();
+    // Only subscribe to changes if the user is authenticated
+    if (user) {
+      // Use a more specific channel name to avoid conflicts
+      const channel = supabase
+        .channel(`user_${user.id}_notes`)
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'notes',
+            filter: `user_id=eq.${user.id}`
+          }, 
+          (payload) => {
+            console.log('Received change:', payload);
+            fetchNotes();
+          }
+        )
+        .subscribe((status, err) => {
+          if (err) {
+            console.error('Error subscribing to changes:', err);
+          }
+        });
       
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [toast, user]);
 
   if (!user) {

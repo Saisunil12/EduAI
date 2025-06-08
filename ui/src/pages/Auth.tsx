@@ -16,6 +16,7 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [activeTab, setActiveTab] = useState("login");
   const [showResendOption, setShowResendOption] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const { user, signIn, signUp, resendConfirmationEmail, isLoading } = useAuth();
   const { toast } = useToast();
 
@@ -26,27 +27,49 @@ export default function Auth() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email || !password) {
-      toast({
-        title: "Missing information",
-        description: "Please provide both email and password",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Clear any previous states
+    setShowResendOption(false);
+    setAuthError(null);
 
     const { error } = await signIn(email, password);
 
     if (error) {
-      if (error.message.includes("Email not confirmed")) {
+      if (error.message.includes('verify your email')) {
         setShowResendOption(true);
-      } else {
+      }
+      // The error message is already handled in the signIn function
+    }
+    // On success, the auth state listener will handle the navigation
+  };
+
+  const handleResendVerification = async () => {
+    try {
+      setAuthError(null);
+      const { error } = await resendConfirmationEmail(email);
+      
+      if (error) {
+        setAuthError(error.message);
         toast({
-          title: "Login failed",
+          title: "Error",
           description: error.message,
           variant: "destructive",
         });
+      } else {
+        toast({
+          title: "Verification email sent",
+          description: "Please check your inbox for the verification link.",
+        });
+        setShowResendOption(false);
       }
+    } catch (err) {
+      console.error('Failed to resend verification:', err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setAuthError(errorMessage);
+      toast({
+        title: "Error",
+        description: `Failed to resend verification email: ${errorMessage}`,
+        variant: "destructive",
+      });
     }
   };
 

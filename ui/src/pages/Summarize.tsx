@@ -28,9 +28,9 @@ import ReactMarkdown from 'react-markdown';
 export default function Summarize() {
   const location = useLocation();
   const { toast } = useToast();
-  const [selectedNote, setSelectedNote] = useState(location.state?.noteId || '');
-  const [format, setFormat] = useState('bullet');
-  const [length, setLength] = useState('medium');
+  const [selectedNote, setSelectedNote] = useState<string>(location.state?.noteId || '');
+  const [format, setFormat] = useState<string>('bullet');
+  const [length, setLength] = useState<string>('medium');
   const [isGenerating, setIsGenerating] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const { user } = useAuth();
@@ -143,7 +143,10 @@ export default function Summarize() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Note</label>
-                  <Select value={selectedNote} onValueChange={setSelectedNote}>
+                  <Select 
+                    value={selectedNote || undefined} 
+                    onValueChange={(value) => setSelectedNote(value || '')}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Choose a note" />
                     </SelectTrigger>
@@ -152,10 +155,12 @@ export default function Summarize() {
                         <SelectItem value="loading" disabled>Loading notes...</SelectItem>
                       ) : notes.length > 0 ? (
                         notes.map((note) => (
-                          <SelectItem key={note.id} value={note.id}>{note.title}</SelectItem>
+                          <SelectItem key={note.id} value={note.id}>
+                            {note.title}
+                          </SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="none" disabled>No notes available</SelectItem>
+                        <SelectItem value="" disabled>No notes available</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
@@ -165,7 +170,7 @@ export default function Summarize() {
                   <label className="text-sm font-medium">Format</label>
                   <Select value={format} onValueChange={setFormat}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select format" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="bullet">Bullet Points</SelectItem>
@@ -179,7 +184,7 @@ export default function Summarize() {
                   <label className="text-sm font-medium">Length</label>
                   <Select value={length} onValueChange={setLength}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select length" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="short">Short</SelectItem>

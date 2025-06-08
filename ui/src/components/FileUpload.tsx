@@ -100,52 +100,94 @@ export default function FileUpload({ onFilesSelected, onFileUploaded, className 
     
     try {
       for (const file of files) {
-        const fileName = `${user.id}/${Date.now()}-${file.name}`;
-        const fileExtension = file.name.split('.').pop()?.toLowerCase();
-        
-        // Upload file to Supabase Storage
-        const { data, error } = await supabase.storage
-          .from('pdf_files')
-          .upload(fileName, file);
+        try {
+          // Sanitize the filename
+          const sanitizedFileName = file.name.replace(/[^\w\d.-]/g, '_');
+          const fileName = `${user.id}/${Date.now()}-${sanitizedFileName}`;
+          const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'unknown';
           
-        if (error) {
-          throw error;
+          // Check if the file type is supported
+          if (!['pdf', 'txt', 'docx'].includes(fileExtension)) {
+            throw new Error(`Unsupported file type: ${fileExtension}`);
+          }
+          
+          console.log('Uploading file:', {
+            bucket: 'pdf-files',
+            fileName,
+            fileSize: file.size,
+            fileType: file.type
+          });
+          
+          // Upload file to Supabase Storage
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('pdf-files')
+            .upload(fileName, file, {
+              cacheControl: '3600',
+              upsert: false
+            });
+            
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+            throw new Error(`Storage upload failed: ${uploadError.message}`);
+          }
+          
+          console.log('Upload successful:', uploadData);
+          
+          // Get the public URL for the uploaded file
+          const { data: { publicUrl } } = supabase.storage
+            .from('pdf-files')
+            .getPublicUrl(fileName);
+            
+          console.log('Generated public URL:', publicUrl);
+          
+          // Create a record in the notes table
+          const { data: noteData, error: noteError } = await supabase
+            .from('notes')
+            .insert([{
+              user_id: user.id,
+              title: file.name,
+              description: '',
+              file_path: publicUrl,
+              file_type: fileExtension,
+              file_size: file.size
+            }])
+            .select()
+            .single();
+          
+          if (noteError) {
+            console.error('Database error:', noteError);
+            // Try to clean up the uploaded file if the database insert fails
+            await supabase.storage
+              .from('pdf-files')
+              .remove([fileName])
+              .catch(console.error);
+              
+            throw new Error(`Database error: ${noteError.message}`);
+          }
+          
+          console.log('Note created:', noteData);
+          onFileUploaded?.(publicUrl, noteData);
+          
+          toast({
+            title: "Upload successful",
+            description: `Successfully uploaded ${file.name}`
+          });
+          
+        } catch (error) {
+          console.error(`Error uploading ${file.name}:`, error);
+          toast({
+            title: `Error uploading ${file.name}`,
+            description: error instanceof Error ? error.message : 'Unknown error occurred',
+            variant: 'destructive'
+          });
         }
-        
-        // Get the public URL for the uploaded file
-        const { data: { publicUrl } } = supabase.storage
-          .from('pdf_files')
-          .getPublicUrl(fileName);
-        
-        // Create a record in the notes table
-        const { data: noteData, error: noteError } = await supabase
-          .from('notes')
-          .insert({
-            user_id: user.id,
-            title: file.name,
-            description: '',
-            file_path: publicUrl,
-            file_type: fileExtension || 'unknown',
-            file_size: file.size
-          })
-          .select()
-          .single();
-        
-        if (noteError) {
-          throw noteError;
-        }
-        
-        onFileUploaded?.(publicUrl, noteData);
       }
       
-      toast({
-        title: "Upload successful",
-        description: `${files.length} file(s) uploaded successfully`
-      });
-      
+      // Clear the files list after all uploads are attempted
       setFiles([]);
+      
     } catch (error) {
-      console.error("Error uploading file:", error);
+      console.error("Error in upload process:", error);
       toast({
         title: "Upload failed",
         description: error instanceof Error ? error.message : "An unknown error occurred",

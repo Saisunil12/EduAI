@@ -18,19 +18,48 @@ from supabase import create_client, Client
 from utils import extract_text_from_pdf, clean_text, save_podcast_metadata, get_podcast_metadata
 from podcast_generator import generate_podcast_script, create_audio
 
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Load environment variables
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY not found in environment variables")
 
-# Require GROQ_MODEL env var and remove fallback to decommissioned model
-GROQ_MODEL = os.getenv("GROQ_MODEL")
-if not GROQ_MODEL:
-    raise ValueError(
-        "GROQ_MODEL not set. Please set the GROQ_MODEL env var to a supported model. " +
-        "See https://console.groq.com/docs/deprecations for options."
-    )
+# Log environment variables (without sensitive values)
+logger.info("Environment variables:")
+logger.info(f"VITE_SUPABASE_URL set: {bool(os.getenv('VITE_SUPABASE_URL'))}")
+logger.info(f"VITE_SUPABASE_ANON_KEY set: {bool(os.getenv('VITE_SUPABASE_ANON_KEY'))}")
+logger.info(f"GROQ_API_KEY set: {bool(os.getenv('GROQ_API_KEY'))}")
+logger.info(f"GROQ_MODEL: {os.getenv('GROQ_MODEL')}")
+logger.info(f"PORT: {os.getenv('PORT')}")
+logger.info(f"HOST: {os.getenv('HOST')}")
+
+try:
+    # Initialize Supabase client
+    SUPABASE_URL = os.getenv("VITE_SUPABASE_URL")
+    SUPABASE_ANON_KEY = os.getenv("VITE_SUPABASE_ANON_KEY")
+    
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise ValueError("Missing Supabase configuration")
+        
+    logger.info("Initializing Supabase client...")
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+    logger.info("Supabase client initialized successfully")
+    
+except Exception as e:
+    logger.error(f"Failed to initialize Supabase client: {str(e)}")
+    raise
+
+# Set default values for required environment variables
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "mistral-saba-24b")
 
 # Initialize Groq client
 client = Groq(api_key=GROQ_API_KEY)
@@ -49,11 +78,8 @@ app.add_middleware(
 
 # Setup static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/podcasts", StaticFiles(directory="podcasts"), name="podcasts")
 templates = Jinja2Templates(directory="templates")
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Create necessary directories
 os.makedirs("uploads", exist_ok=True)
@@ -62,10 +88,6 @@ os.makedirs("metadata", exist_ok=True)
 
 # Store tasks in memory (in production, use a proper database)
 TASKS = {}
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 class PodcastStatus(BaseModel):
     status: str
@@ -148,7 +170,12 @@ async def get_podcast(task_id: str):
     audio_path = metadata.get("output_path")
     if not audio_path or not os.path.exists(audio_path):
         raise HTTPException(status_code=404, detail="Audio file not found")
-    return FileResponse(audio_path, media_type="audio/mpeg", filename=os.path.basename(audio_path))
+    return FileResponse(
+        audio_path,
+        media_type="audio/mpeg",
+        filename=os.path.basename(audio_path),
+        headers={"Accept-Ranges": "bytes"}
+    )
 
 # Legacy endpoints for backward compatibility
 @app.get("/podcast/{task_id}/status")
@@ -278,53 +305,186 @@ async def summarize_note(
 
 @app.post("/api/chat")
 async def chat_with_note(
-    note_id: str = Body(...),
-    question: str = Body(...),
-    history: list = Body(default=[])
+    request: Request,
+    note_id: str = Body(..., embed=True, min_length=1, description="The ID of the note to chat about"),
+    question: str = Body(..., embed=True, min_length=1, description="The user's question"),
+    history: list = Body(default=[], embed=True, description="Chat history for context")
 ):
-    # 1. Fetch note record from Supabase
-    note_resp = supabase.table("notes").select("file_path,title").eq("id", note_id).single().execute()
-    if not note_resp.data:
-        raise HTTPException(status_code=404, detail="Note not found")
-    file_path = note_resp.data["file_path"]
-    note_title = note_resp.data["title"]
+    logger.info(f"=== New Chat Request ===")
+    logger.info(f"Note ID: {note_id}")
+    logger.info(f"Question: {question[:100]}{'...' if len(question) > 100 else ''}")
+    
+    try:
+        # 1. Validate inputs
+        if not note_id or not isinstance(note_id, str):
+            logger.error("Invalid note_id provided")
+            raise HTTPException(status_code=400, detail="A valid note ID is required")
+            
+        if not question or not isinstance(question, str) or len(question.strip()) < 2:
+            logger.error("Invalid question provided")
+            raise HTTPException(status_code=400, detail="A valid question is required")
 
-    # 2. Download PDF from Supabase Storage
-    pdf_resp = requests.get(file_path)
-    if pdf_resp.status_code != 200:
-        raise HTTPException(status_code=404, detail="Could not download PDF from storage")
-    pdf_bytes = pdf_resp.content
+        # 2. Fetch note record from Supabase
+        try:
+            logger.info(f"Fetching note {note_id} from database...")
+            note_resp = supabase.table("notes").select("file_path,title").eq("id", note_id).single().execute()
+            
+            if not note_resp.data:
+                logger.error(f"Note {note_id} not found in database")
+                raise HTTPException(status_code=404, detail="Note not found")
+                
+            file_path = note_resp.data.get("file_path")
+            note_title = note_resp.data.get("title", "Untitled Note")
+            
+            if not file_path:
+                logger.error(f"Note {note_id} has no file_path")
+                raise HTTPException(status_code=400, detail="Note has no associated file")
+                
+            logger.info(f"Found note: {note_title} (File: {file_path})")
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            error_msg = f"Database error: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise HTTPException(status_code=500, detail=error_msg)
 
-    # 3. Extract text from PDF
-    text_content = extract_text_from_pdf(pdf_bytes)
-    text_content = clean_text(text_content)
+        # 3. Download PDF from Supabase Storage
+        try:
+            logger.info(f"Downloading PDF from: {file_path}")
+            pdf_resp = requests.get(file_path, timeout=15)  # Increased timeout
+            pdf_resp.raise_for_status()
+            pdf_bytes = pdf_resp.content
+            
+            if not pdf_bytes:
+                raise ValueError("Downloaded PDF is empty")
+                
+            logger.info("Successfully downloaded PDF file")
+            
+        except requests.Timeout:
+            error_msg = "Timed out while downloading PDF"
+            logger.error(error_msg)
+            raise HTTPException(status_code=504, detail=error_msg)
+            
+        except requests.RequestException as e:
+            error_msg = f"Error downloading PDF: {str(e)}"
+            logger.error(error_msg)
+            status_code = 404 if isinstance(e, requests.HTTPError) and e.response.status_code == 404 else 500
+            raise HTTPException(status_code=status_code, detail=error_msg)
 
-    # 4. Build prompt for Groq LLM
-    system_prompt = f"You are an expert study assistant. Answer questions about the following note: {note_title}. Use the content to answer as accurately as possible. Cite sources if possible."
-    user_prompt = f"Note Content:\n{text_content[:32000]}\n\nQuestion: {question}"
-    messages = [
-        {"role": "system", "content": system_prompt},
-    ]
-    # Optionally add history
-    for msg in history:
-        messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
-    messages.append({"role": "user", "content": user_prompt})
+        # 4. Extract text from PDF
+        try:
+            logger.info("Extracting text from PDF...")
+            text_content = extract_text_from_pdf(pdf_bytes)
+            
+            if not text_content or not isinstance(text_content, str):
+                raise ValueError("Failed to extract text from PDF")
+                
+            text_content = clean_text(text_content)
+            
+            if not text_content.strip():
+                raise ValueError("Extracted text is empty")
+                
+            logger.info(f"Extracted {len(text_content)} characters from PDF")
+            
+        except Exception as e:
+            error_msg = f"Error processing PDF: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise HTTPException(status_code=400, detail=error_msg)
 
-    # 5. Call Groq LLM
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=messages
-    )
-    answer = response.choices[0].message.content.strip()
-    # Dummy sources for now (improve with retrieval later)
-    sources = [
-        {
-            "text": "This is a sample cited passage from the note.",
-            "page": 1,
-            "document": note_title + ".pdf"
-        }
-    ]
-    return {"answer": answer, "sources": sources}
+        # 5. Build prompt for Groq LLM
+        try:
+            logger.info("Building prompt for Groq LLM...")
+            
+            # Truncate content to fit within token limits
+            max_content_length = 32000
+            if len(text_content) > max_content_length:
+                logger.warning(f"Truncating note content from {len(text_content)} to {max_content_length} characters")
+                text_content = text_content[:max_content_length]
+            
+            system_prompt = (
+                "You are an expert study assistant. Answer questions about the provided note content. "
+                "Be accurate, concise, and helpful. If the answer isn't in the note, say so. "
+                f"The note is titled: {note_title}"
+            )
+            
+            user_prompt = f"""Note Content:
+{text_content}
+
+Question: {question}
+
+Please provide a detailed answer based on the note content above."""
+            
+            # Build messages array
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Add conversation history if available
+            if history and isinstance(history, list):
+                for msg in history:
+                    if (isinstance(msg, dict) and 
+                        msg.get("role") in ["user", "assistant"] and 
+                        msg.get("content") and 
+                        isinstance(msg["content"], str)):
+                        
+                        messages.append({
+                            "role": msg["role"], 
+                            "content": msg["content"][:2000]  # Limit history length
+                        })
+            
+            # Add current question
+            messages.append({"role": "user", "content": question})
+            
+            logger.info(f"Sending request to Groq with {len(messages)} messages")
+
+            # 6. Call Groq LLM
+            try:
+                response = client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=messages,
+                    max_tokens=1500,
+                    temperature=0.7,
+                    top_p=0.9,
+                    timeout=30  # seconds
+                )
+                
+                if not response.choices or not response.choices[0].message.content:
+                    raise ValueError("Empty response from AI model")
+                    
+                answer = response.choices[0].message.content.strip()
+                logger.info("Successfully received response from Groq")
+                
+                # Simple source citation (can be enhanced with RAG in the future)
+                sources = [{
+                    "text": "Answer is based on the provided note content.",
+                    "page": 1,
+                    "document": f"{note_title}.pdf"
+                }]
+                
+                logger.info("Returning successful response")
+                return {
+                    "answer": answer,
+                    "sources": sources
+                }
+                
+            except Exception as e:
+                error_msg = f"Groq API error: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                raise HTTPException(status_code=502, detail=error_msg)
+            
+        except Exception as e:
+            error_msg = f"Error in chat processing: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise HTTPException(status_code=500, detail=error_msg)
+            
+    except HTTPException as he:
+        # Re-raise HTTP exceptions as-is
+        logger.error(f"HTTP Error {he.status_code}: {he.detail}")
+        raise
+        
+    except Exception as e:
+        error_msg = f"Unexpected error in chat_with_note: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again later.")
 
 async def process_podcast_creation(
     task_id: str,
@@ -398,7 +558,7 @@ async def process_podcast_creation(
 
 if __name__ == "__main__":
     import uvicorn, os
-    # Use PORT env var or default to 8000
-    port = int(os.getenv("PORT", 8000))
-    host = os.getenv("HOST", "0.0.0.0")
+    # Use PORT env var or default to 8006
+    port = int(os.getenv("PORT", 8006))
+    host = os.getenv("HOST", "127.0.0.1")
     uvicorn.run(app, host=host, port=port)

@@ -1,0 +1,8 @@
+@echo off
+set VITE_SUPABASE_URL=https://xbfwqbhiwecbumwbjtoz.supabase.co
+set VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhiZndxYmhpd2VjYnVtd2JqdG96Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDk4MjE2MDAsImV4cCI6MjAyNTM5NzYwMH0.RHELKzLJBDmwOhWNH5LwQOXXlPi-QmxnQgE6_T7YlQE
+set GROQ_API_KEY=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
+set GROQ_MODEL=mistral-saba-24b
+set PORT=8006
+set HOST=127.0.0.1
+python app.py 

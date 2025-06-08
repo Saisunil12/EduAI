@@ -2,10 +2,62 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://guxewmpocounzgrgklsh.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1eGV3bXBvY291bnpncmdrbHNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcyNjczMzQsImV4cCI6MjA2Mjg0MzMzNH0.DFOf4ldA-LikxmvCI50m5Ttdz3rIMCNLcTniSsDFE9U";
+// Get environment variables
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
+// Create a custom fetch implementation that blocks WebSockets and handles auth
+const customFetch = async (url: string, options: RequestInit = {}) => {
+  const requestUrl = url.toString();
+  
+  // Block all WebSocket connections
+  if (options.headers && (options.headers as any)['Upgrade'] === 'websocket') {
+    console.log('[Supabase] Blocking WebSocket connection to:', requestUrl);
+    return new Response(null, { status: 200 });
+  }
+  
+  // Add headers for Supabase auth
+  const headers = new Headers(options.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  headers.set('apikey', SUPABASE_ANON_KEY);
+  
+  // Make the request with updated headers
+  const response = await fetch(requestUrl, {
+    ...options,
+    headers,
+  });
+  
+  return response;
+};
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Create the Supabase client with realtime completely disabled
+const supabaseOptions = {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+    storageKey: 'sb-auth-token',
+  },
+  // Disable realtime features
+  realtime: {
+    // @ts-ignore - This disables realtime
+    disable: true,
+    params: {
+      eventsPerSecond: 0,
+    },
+  },
+  // @ts-ignore - Disable realtime at a lower level
+  _realtime: null,
+  global: {
+    // @ts-ignore - Use our custom fetch
+    fetch: customFetch,
+  },
+};
+
+export const supabase = createClient<Database>(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  supabaseOptions
+);
